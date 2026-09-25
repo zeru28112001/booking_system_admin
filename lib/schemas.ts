@@ -9,12 +9,25 @@ export type LoginFormData = z.infer<typeof loginSchema>;
 
 export const categorySchema = z.object({
   name: z.string().min(2, 'Category name must be at least 2 characters'),
+  name_mm: z.string().optional(),
   iconName: z.string().min(1, 'Please select a visual icon'),
   description: z.string().optional(),
   isActive: z.boolean(),
 });
 
 export type CategoryFormData = z.infer<typeof categorySchema>;
+
+export const createProviderSchema = z.object({
+  name: z.string().min(2, 'Full Name is required'),
+  phone: z.string().min(6, 'Valid Phone Number is required'),
+  email: z.string().email('Valid Email is required').optional().or(z.literal('')),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  shopName: z.string().min(2, 'Shop / Business Name is required'),
+  categoryId: z.string().min(1, 'Category is required'),
+  address: z.string().min(3, 'Address is required'),
+});
+
+export type CreateProviderFormData = z.infer<typeof createProviderSchema>;
 
 export const bannerSchema = z.object({
   title: z.string().min(2, 'Banner title must be at least 2 characters'),

@@ -17,7 +17,9 @@ import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { apiRequest } from '@/lib/api';
 import { toast } from 'sonner';
-import { Search, CheckCircle2, XCircle, ShieldAlert, RefreshCw, UserCheck, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, CheckCircle2, XCircle, ShieldAlert, RefreshCw, UserCheck, Loader2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { createProviderSchema, CreateProviderFormData } from '@/lib/schemas';
 
 interface Provider {
   _id?: string;
@@ -55,11 +57,54 @@ export default function ProvidersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
-  // Dialog state for Verify & Reject
+  // Dialog state for Verify & Reject & Create
   const [verifyProvider, setVerifyProvider] = useState<Provider | null>(null);
   const [rejectProvider, setRejectProvider] = useState<Provider | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const { user, isLoading: isAuthLoading } = useAuth();
+
+  // Fetch categories for Provider Creation dropdown
+  const { data: categories = [] } = useQuery<{ _id: string; name: string }[]>({
+    queryKey: ['categories', user?.id],
+    queryFn: async () => {
+      const res = await apiRequest('/admin/categories');
+      const raw = res?.data || res || [];
+      return Array.isArray(raw) ? raw : [];
+    },
+    enabled: !!user,
+  });
+
+  const createForm = useForm<CreateProviderFormData>({
+    resolver: zodResolver(createProviderSchema),
+    defaultValues: {
+      name: '',
+      phone: '',
+      email: '',
+      password: '',
+      shopName: '',
+      categoryId: '',
+      address: '',
+    },
+  });
+
+  const createProviderMutation = useMutation({
+    mutationFn: async (data: CreateProviderFormData) => {
+      return apiRequest('/admin/providers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      toast.success('Provider account created successfully!');
+      queryClient.invalidateQueries({ queryKey: ['providers'] });
+      setIsCreateOpen(false);
+      createForm.reset();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to create provider');
+    },
+  });
 
   const handleTabChange = (val: string) => {
     setActiveTab(val);
@@ -194,16 +239,29 @@ export default function ProvidersPage() {
               Verify service provider applications, review business credentials, and manage accounts
             </p>
           </div>
-          <Button
-            onClick={() => refetch()}
-            disabled={isLoading || isRefetching}
-            variant="outline"
-            size="sm"
-            className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-zinc-100 text-xs gap-2"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                createForm.reset();
+                setIsCreateOpen(true);
+              }}
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create Provider
+            </Button>
+            <Button
+              onClick={() => refetch()}
+              disabled={isLoading || isRefetching}
+              variant="outline"
+              size="sm"
+              className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-zinc-100 text-xs gap-2"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {error && (
@@ -464,6 +522,141 @@ export default function ProvidersPage() {
             }
           })}
         />
+
+        {/* Create Provider Modal Dialog */}
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold text-zinc-100">
+                Register New Service Provider
+              </DialogTitle>
+              <DialogDescription className="text-xs text-zinc-400">
+                Directly onboard a verified service provider account into the system.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form
+              onSubmit={createForm.handleSubmit((data) => createProviderMutation.mutate(data))}
+              className="space-y-3 py-2"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-300">Full Name *</Label>
+                  <Input
+                    placeholder="e.g. Mg Mg"
+                    {...createForm.register('name')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs"
+                  />
+                  {createForm.formState.errors.name && (
+                    <p className="text-[10px] text-red-400">{createForm.formState.errors.name.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-300">Phone Number *</Label>
+                  <Input
+                    placeholder="e.g. 09123456789"
+                    {...createForm.register('phone')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs"
+                  />
+                  {createForm.formState.errors.phone && (
+                    <p className="text-[10px] text-red-400">{createForm.formState.errors.phone.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-300">Shop / Business Name *</Label>
+                  <Input
+                    placeholder="e.g. Style Salon & Spa"
+                    {...createForm.register('shopName')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs"
+                  />
+                  {createForm.formState.errors.shopName && (
+                    <p className="text-[10px] text-red-400">{createForm.formState.errors.shopName.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-300">Category *</Label>
+                  <select
+                    {...createForm.register('categoryId')}
+                    className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="">Select Category...</option>
+                    {categories.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {createForm.formState.errors.categoryId && (
+                    <p className="text-[10px] text-red-400">{createForm.formState.errors.categoryId.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-300">Email Address (Optional)</Label>
+                  <Input
+                    type="email"
+                    placeholder="provider@example.com"
+                    {...createForm.register('email')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-300">Password *</Label>
+                  <Input
+                    type="password"
+                    placeholder="Min 6 characters"
+                    {...createForm.register('password')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs"
+                  />
+                  {createForm.formState.errors.password && (
+                    <p className="text-[10px] text-red-400">{createForm.formState.errors.password.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-300">Shop Address *</Label>
+                <Input
+                  placeholder="e.g. No. 12, Pyay Road, Kamayut, Yangon"
+                  {...createForm.register('address')}
+                  className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs"
+                />
+                {createForm.formState.errors.address && (
+                  <p className="text-[10px] text-red-400">{createForm.formState.errors.address.message}</p>
+                )}
+              </div>
+
+              <DialogFooter className="pt-3 border-t border-zinc-800/80">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="border-zinc-800 bg-zinc-950 text-zinc-300 hover:text-zinc-100 text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={createProviderMutation.isPending}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-2"
+                >
+                  {createProviderMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Create Provider Account
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

@@ -84,6 +84,7 @@ export function getCategoryIcon(iconName?: string): LucideIcon {
 interface Category {
   _id: string;
   name: string;
+  name_mm?: string;
   iconName: string;
   description?: string;
   isActive?: boolean;
@@ -128,6 +129,7 @@ export default function CategoriesPage() {
     resolver: zodResolver(categorySchema),
     defaultValues: {
       name: '',
+      name_mm: '',
       iconName: 'content_cut',
       description: '',
       isActive: true,
@@ -179,6 +181,7 @@ export default function CategoriesPage() {
     setEditingCategory(null);
     reset({
       name: '',
+      name_mm: '',
       iconName: 'content_cut',
       description: '',
       isActive: true,
@@ -190,6 +193,7 @@ export default function CategoriesPage() {
     setEditingCategory(cat);
     reset({
       name: cat.name,
+      name_mm: cat.name_mm || '',
       iconName: cat.iconName || 'content_cut',
       description: cat.description || '',
       isActive: cat.isActive ?? true,
@@ -310,19 +314,33 @@ export default function CategoriesPage() {
             </DialogHeader>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="catName" className="text-xs font-semibold text-zinc-300">
-                  Category Name
-                </Label>
-                <Input
-                  id="catName"
-                  placeholder="e.g. Hair Cut & Barber"
-                  {...register('name')}
-                  className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs focus-visible:ring-indigo-500"
-                />
-                {errors.name && (
-                  <p className="text-xs text-red-400">{errors.name.message}</p>
-                )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="catName" className="text-xs font-semibold text-zinc-300">
+                    Category Name (English)
+                  </Label>
+                  <Input
+                    id="catName"
+                    placeholder="e.g. Hair Cut & Barber"
+                    {...register('name')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs focus-visible:ring-indigo-500"
+                  />
+                  {errors.name && (
+                    <p className="text-xs text-red-400">{errors.name.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="catNameMm" className="text-xs font-semibold text-zinc-300">
+                    Category Name (Myanmar)
+                  </Label>
+                  <Input
+                    id="catNameMm"
+                    placeholder="ဥပမာ- ဆံပင်ညှပ်နှင့် ဆလုန်း"
+                    {...register('name_mm')}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 text-xs focus-visible:ring-indigo-500"
+                  />
+                </div>
               </div>
 
               {/* Visual Icon Picker Grid */}
