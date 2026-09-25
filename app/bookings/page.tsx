@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { AdminLayout } from '@/components/layout/admin-layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,68 +12,150 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/api';
-import { Search, RefreshCw, Loader2, Eye, Clock, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
+import { Search, RefreshCw, Loader2, Eye, Clock, CheckCircle2, AlertCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Booking {
-  _id: string;
+  _id?: string;
+  id?: string;
   customerName?: string;
   providerName?: string;
   serviceTitle?: string;
+  serviceName?: string;
   price?: number;
-  status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+  status?: string;
   date?: string;
   notes?: string;
   createdAt?: string;
-  customer?: { fullName?: string; email?: string };
-  provider?: { fullName?: string; businessName?: string };
-  service?: { title?: string; price?: number };
+  customerId?: { _id?: string; name?: string; email?: string; phone?: string };
+  providerId?: { _id?: string; name?: string; shopName?: string; address?: string; phone?: string };
+  customer?: { fullName?: string; name?: string; email?: string };
+  provider?: { fullName?: string; name?: string; businessName?: string; shopName?: string };
+  service?: { title?: string; name?: string; price?: number };
+}
+
+interface PaginatedBookingsResponse {
+  items: Booking[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
 }
 
 export default function BookingsPage() {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
+  const { user, isLoading: isAuthLoading } = useAuth();
+
   const {
-    data: bookings = [],
+    data,
     isLoading,
     isRefetching,
+    error,
     refetch,
-  } = useQuery<Booking[]>({
-    queryKey: ['bookings', activeTab],
+  } = useQuery<PaginatedBookingsResponse>({
+    queryKey: ['bookings', activeTab, page, limit, user?.id],
     queryFn: async () => {
-      const queryParam = activeTab && activeTab !== 'all' ? `?status=${activeTab}` : '';
-      const res = await apiRequest(`/admin/bookings${queryParam}`);
-      return res.data || [];
+      const statusParam = activeTab && activeTab !== 'all' ? `status=${activeTab}&` : '';
+      const res = await apiRequest(`/admin/bookings?${statusParam}page=${page}&limit=${limit}`);
+
+      let items: Booking[] = [];
+      let pagination = { total: 0, page, limit, totalPages: 1, hasMore: false };
+
+      if (res?.data?.items && Array.isArray(res.data.items)) {
+        items = res.data.items;
+        pagination = res.data.pagination || pagination;
+      } else if (Array.isArray(res?.data)) {
+        items = res.data;
+        pagination = {
+          total: items.length,
+          page: 1,
+          limit: items.length || limit,
+          totalPages: 1,
+          hasMore: false,
+        };
+      } else if (Array.isArray(res)) {
+        items = res;
+        pagination = {
+          total: items.length,
+          page: 1,
+          limit: items.length || limit,
+          totalPages: 1,
+          hasMore: false,
+        };
+      }
+
+      return { items, pagination };
     },
+    enabled: !!user,
+    retry: 2,
+    staleTime: 5_000,
   });
 
-  const filteredBookings = bookings.filter((b) => {
-    const q = searchQuery.toLowerCase();
-    const cName = b.customerName || b.customer?.fullName || '';
-    const pName = b.providerName || b.provider?.fullName || '';
-    const sTitle = b.serviceTitle || b.service?.title || '';
+  const bookings = data?.items || [];
+  const pagination = data?.pagination || { total: 0, page: 1, limit: 10, totalPages: 1, hasMore: false };
+
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    setPage(1);
+  };
+
+  const filteredBookings = (Array.isArray(bookings) ? bookings : []).filter((b) => {
+    if (!b) return false;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+
+    const idStr = String(b._id || b.id || '').toLowerCase();
+    const cName = String(
+      b.customerName ||
+      (typeof b.customerId === 'object' ? b.customerId?.name : '') ||
+      b.customer?.fullName ||
+      b.customer?.name ||
+      ''
+    ).toLowerCase();
+    const pName = String(
+      b.providerName ||
+      (typeof b.providerId === 'object' ? b.providerId?.name || b.providerId?.shopName : '') ||
+      b.provider?.fullName ||
+      b.provider?.name ||
+      ''
+    ).toLowerCase();
+    const sTitle = String(
+      b.serviceTitle ||
+      b.serviceName ||
+      b.service?.title ||
+      b.service?.name ||
+      ''
+    ).toLowerCase();
 
     return (
-      b._id.toLowerCase().includes(q) ||
-      cName.toLowerCase().includes(q) ||
-      pName.toLowerCase().includes(q) ||
-      sTitle.toLowerCase().includes(q)
+      idStr.includes(q) ||
+      cName.includes(q) ||
+      pName.includes(q) ||
+      sTitle.includes(q)
     );
   });
 
-  const renderStatusBadge = (status: string) => {
-    switch (status) {
+  const renderStatusBadge = (status?: string) => {
+    const s = String(status || 'pending').toLowerCase();
+    switch (s) {
       case 'completed':
         return (
           <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-[10px] gap-1">
             <CheckCircle2 className="h-3 w-3" /> Completed
           </Badge>
         );
+      case 'in_progress':
       case 'accepted':
         return (
           <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-500/10 text-[10px] gap-1">
-            <Clock className="h-3 w-3" /> Accepted
+            <Clock className="h-3 w-3" /> {s === 'in_progress' ? 'In Progress' : 'Accepted'}
           </Badge>
         );
       case 'pending':
@@ -82,13 +165,14 @@ export default function BookingsPage() {
           </Badge>
         );
       case 'cancelled':
+      case 'no_show':
         return (
           <Badge variant="outline" className="border-red-500/30 text-red-400 bg-red-500/10 text-[10px] gap-1">
-            <XCircle className="h-3 w-3" /> Cancelled
+            <XCircle className="h-3 w-3" /> {s === 'no_show' ? 'No-Show' : 'Cancelled'}
           </Badge>
         );
       default:
-        return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
+        return <Badge variant="outline" className="text-[10px]">{s}</Badge>;
     }
   };
 
@@ -111,13 +195,22 @@ export default function BookingsPage() {
             className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-zinc-100 text-xs gap-2"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
-            Refresh
+            Refresh Data
           </Button>
         </div>
 
+        {error && (
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400 font-medium flex items-center justify-between">
+            <span>{(error as any).message || 'Failed to load bookings'}</span>
+            <Button onClick={() => refetch()} variant="outline" size="sm" className="h-7 text-xs border-red-500/30 text-red-400 hover:bg-red-500/20">
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Filters & Tabs */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full md:w-auto">
             <TabsList className="bg-zinc-900 border border-zinc-800 text-zinc-400">
               <TabsTrigger value="all" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 text-xs">
                 All
@@ -150,13 +243,29 @@ export default function BookingsPage() {
 
         {/* Data Table */}
         <Card className="bg-zinc-900/60 border-zinc-800 backdrop-blur overflow-hidden">
-          <CardHeader className="py-4 border-b border-zinc-800/80">
+          <CardHeader className="py-4 border-b border-zinc-800/80 flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold text-zinc-200">
-              Bookings Registry ({filteredBookings.length})
+              Bookings Registry ({filteredBookings.length} of {pagination.total})
             </CardTitle>
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <span>Show:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+              >
+                <option value={5}>5 per page</option>
+                <option value={10}>10 per page</option>
+                <option value={20}>20 per page</option>
+                <option value={50}>50 per page</option>
+              </select>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            {isLoading ? (
+            {isLoading || isAuthLoading ? (
               <div className="p-12 text-center text-zinc-500">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-indigo-500" />
                 <p className="text-xs">Fetching bookings data...</p>
@@ -178,17 +287,18 @@ export default function BookingsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBookings.map((b) => {
-                    const cName = b.customerName || b.customer?.fullName || 'Customer';
-                    const pName = b.providerName || b.provider?.fullName || 'Provider';
-                    const sTitle = b.serviceTitle || b.service?.title || 'Service Booking';
+                  {filteredBookings.map((b, idx) => {
+                    const bookingId = String(b._id || b.id || `booking-${idx}`);
+                    const cName = b.customerName || b.customerId?.name || b.customer?.fullName || b.customer?.name || 'Customer';
+                    const pName = b.providerName || b.providerId?.name || b.providerId?.shopName || b.provider?.fullName || b.provider?.name || 'Provider';
+                    const sTitle = b.serviceTitle || b.serviceName || b.service?.title || b.service?.name || 'Service Booking';
                     const amt = b.price || b.service?.price || 0;
 
                     return (
-                      <TableRow key={b._id} className="border-zinc-800/60 hover:bg-zinc-800/30">
+                      <TableRow key={bookingId} className="border-zinc-800/60 hover:bg-zinc-800/30">
                         <TableCell className="py-3">
                           <p className="font-semibold text-zinc-100 text-xs">{sTitle}</p>
-                          <p className="text-[10px] text-zinc-500 font-mono">#{b._id.substring(0, 10)}...</p>
+                          <p className="text-[10px] text-zinc-500 font-mono">#{bookingId.substring(0, 10)}...</p>
                         </TableCell>
                         <TableCell className="text-zinc-300 text-xs py-3">{cName}</TableCell>
                         <TableCell className="text-zinc-300 text-xs py-3">{pName}</TableCell>
@@ -213,6 +323,34 @@ export default function BookingsPage() {
               </Table>
             )}
           </CardContent>
+
+          {/* Pagination Controls Bar */}
+          <CardFooter className="py-3 border-t border-zinc-800/80 flex items-center justify-between bg-zinc-950/40">
+            <p className="text-xs text-zinc-400">
+              Page <span className="font-semibold text-zinc-200">{pagination.page}</span> of{' '}
+              <span className="font-semibold text-zinc-200">{pagination.totalPages}</span> (Total {pagination.total} records)
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page <= 1 || isLoading}
+                variant="outline"
+                size="sm"
+                className="h-8 border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-zinc-100 text-xs gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Button>
+              <Button
+                onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                disabled={page >= pagination.totalPages || isLoading}
+                variant="outline"
+                size="sm"
+                className="h-8 border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-zinc-100 text-xs gap-1"
+              >
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardFooter>
         </Card>
 
         {/* Booking Details Modal */}
@@ -221,7 +359,7 @@ export default function BookingsPage() {
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-zinc-100">Booking Details</DialogTitle>
               <DialogDescription className="text-xs text-zinc-400">
-                Reference ID: <span className="font-mono text-indigo-400">{selectedBooking?._id}</span>
+                Reference ID: <span className="font-mono text-indigo-400">{selectedBooking?._id || selectedBooking?.id}</span>
               </DialogDescription>
             </DialogHeader>
 
@@ -231,7 +369,7 @@ export default function BookingsPage() {
                   <div>
                     <span className="text-[10px] uppercase font-bold text-zinc-500">Service</span>
                     <p className="font-semibold text-zinc-100 mt-0.5">
-                      {selectedBooking.serviceTitle || selectedBooking.service?.title || 'Standard Service'}
+                      {selectedBooking.serviceTitle || selectedBooking.serviceName || selectedBooking.service?.title || 'Standard Service'}
                     </p>
                   </div>
                   <div>
@@ -246,16 +384,18 @@ export default function BookingsPage() {
                   <div className="p-3 bg-zinc-950/40 rounded-lg border border-zinc-800/80">
                     <span className="text-[10px] uppercase font-bold text-zinc-500">Customer</span>
                     <p className="font-semibold text-zinc-200 mt-1">
-                      {selectedBooking.customerName || selectedBooking.customer?.fullName || 'N/A'}
+                      {selectedBooking.customerName || selectedBooking.customerId?.name || selectedBooking.customer?.fullName || 'N/A'}
                     </p>
-                    <p className="text-zinc-500 text-[11px]">{selectedBooking.customer?.email}</p>
+                    <p className="text-zinc-500 text-[11px]">{selectedBooking.customerId?.email || selectedBooking.customer?.email}</p>
+                    {selectedBooking.customerId?.phone && <p className="text-zinc-500 text-[11px]">{selectedBooking.customerId.phone}</p>}
                   </div>
                   <div className="p-3 bg-zinc-950/40 rounded-lg border border-zinc-800/80">
                     <span className="text-[10px] uppercase font-bold text-zinc-500">Provider</span>
                     <p className="font-semibold text-zinc-200 mt-1">
-                      {selectedBooking.providerName || selectedBooking.provider?.fullName || 'N/A'}
+                      {selectedBooking.providerName || selectedBooking.providerId?.name || selectedBooking.providerId?.shopName || selectedBooking.provider?.fullName || 'N/A'}
                     </p>
-                    <p className="text-zinc-500 text-[11px]">{selectedBooking.provider?.businessName}</p>
+                    <p className="text-zinc-500 text-[11px]">{selectedBooking.providerId?.shopName || selectedBooking.providerId?.address}</p>
+                    {selectedBooking.providerId?.phone && <p className="text-zinc-500 text-[11px]">{selectedBooking.providerId.phone}</p>}
                   </div>
                 </div>
 
@@ -278,4 +418,3 @@ export default function BookingsPage() {
     </AdminLayout>
   );
 }
-

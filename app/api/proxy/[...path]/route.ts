@@ -23,8 +23,9 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
   const url = `${getBackendUrl()}/${targetPath}${searchParams ? `?${searchParams}` : ''}`;
 
   const requestHeaders = new Headers(req.headers);
-  // Remove host header to prevent proxy header mismatch
+  // Remove host and accept-encoding headers to prevent compression decoding mismatches
   requestHeaders.delete('host');
+  requestHeaders.delete('accept-encoding');
   // Securely attach x-api-key on server side only
   requestHeaders.set('x-api-key', getApiKey());
 
@@ -42,6 +43,9 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
 
     const data = await backendRes.arrayBuffer();
     const responseHeaders = new Headers(backendRes.headers);
+    // Delete content encoding & length headers since fetch unzips payload buffer automatically
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('content-length');
 
     return new NextResponse(data, {
       status: backendRes.status,

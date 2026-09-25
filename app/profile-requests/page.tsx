@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { rejectionSchema, RejectionFormData } from '@/lib/schemas';
@@ -18,7 +19,7 @@ import { RefreshCw, Loader2, Check, X, FileText, ArrowRight } from 'lucide-react
 
 interface ProfileRequest {
   _id: string;
-  providerId: string;
+  providerId: string | { _id?: string; name?: string; shopName?: string; phone?: string; address?: string; email?: string };
   providerName?: string;
   providerEmail?: string;
   status: 'pending' | 'approved' | 'rejected';
@@ -34,17 +35,23 @@ export default function ProfileRequestsPage() {
   const [approveRequest, setApproveRequest] = useState<ProfileRequest | null>(null);
   const [rejectRequest, setRejectRequest] = useState<ProfileRequest | null>(null);
 
+  const { user } = useAuth();
+
   const {
     data: requests = [],
     isLoading,
     isRefetching,
     refetch,
   } = useQuery<ProfileRequest[]>({
-    queryKey: ['profile-requests'],
+    queryKey: ['profile-requests', user?.id],
     queryFn: async () => {
       const res = await apiRequest('/admin/profile-requests');
-      return res.data || [];
+      const raw = res?.data || res || [];
+      return Array.isArray(raw) ? raw : [];
     },
+    enabled: !!user,
+    retry: 2,
+    staleTime: 5_000,
   });
 
   const approveMutation = useMutation({
@@ -124,65 +131,71 @@ export default function ProfileRequestsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {requests.map((req) => (
-              <Card key={req._id} className="bg-zinc-900/60 border-zinc-800 backdrop-blur">
-                <CardHeader className="py-4 border-b border-zinc-800/80 flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-sm font-bold text-zinc-100">
-                        {req.providerName || 'Provider Request'}
-                      </CardTitle>
-                      <p className="text-xs text-zinc-400">{req.providerEmail || req.providerId}</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-amber-500/30 text-amber-400 bg-amber-500/10 text-[10px]">
-                    Pending Approval
-                  </Badge>
-                </CardHeader>
+            {requests.map((req) => {
+              const pObj = typeof req.providerId === 'object' && req.providerId !== null ? req.providerId : null;
+              const displayName = req.providerName || pObj?.name || pObj?.shopName || 'Service Provider';
+              const displaySub = req.providerEmail || pObj?.email || pObj?.phone || (typeof req.providerId === 'string' ? req.providerId : 'Provider Request');
 
-                <CardContent className="py-4 space-y-3">
-                  <p className="text-xs font-semibold text-zinc-300">Requested Field Changes:</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {Object.entries(req.requestedChanges || {}).map(([key, value]) => (
-                      <div key={key} className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-xs">
-                        <span className="text-[10px] uppercase font-bold text-zinc-500">{key}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-zinc-400 line-through text-[11px]">
-                            {req.currentValues?.[key] ? String(req.currentValues[key]) : 'None'}
-                          </span>
-                          <ArrowRight className="h-3 w-3 text-indigo-400 shrink-0" />
-                          <span className="text-indigo-300 font-semibold">{String(value)}</span>
-                        </div>
+              return (
+                <Card key={req._id} className="bg-zinc-900/60 border-zinc-800 backdrop-blur">
+                  <CardHeader className="py-4 border-b border-zinc-800/80 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                        <FileText className="h-5 w-5" />
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
+                      <div>
+                        <CardTitle className="text-sm font-bold text-zinc-100">
+                          {displayName}
+                        </CardTitle>
+                        <p className="text-xs text-zinc-400">{displaySub}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="border-amber-500/30 text-amber-400 bg-amber-500/10 text-[10px]">
+                      Pending Approval
+                    </Badge>
+                  </CardHeader>
 
-                <CardFooter className="py-3 border-t border-zinc-800/80 flex justify-between items-center bg-zinc-950/30">
-                  <span className="text-[10px] text-zinc-500 font-mono">ID: {req._id}</span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={() => setApproveRequest(req)}
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8 px-3"
-                    >
-                      <Check className="h-3.5 w-3.5 mr-1" /> Approve Changes
-                    </Button>
-                    <Button
-                      onClick={() => handleOpenReject(req)}
-                      variant="outline"
-                      size="sm"
-                      className="border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs h-8 px-3"
-                    >
-                      <X className="h-3.5 w-3.5 mr-1" /> Reject
-                    </Button>
-                  </div>
-                </CardFooter>
-              </Card>
-            ))}
+                  <CardContent className="py-4 space-y-3">
+                    <p className="text-xs font-semibold text-zinc-300">Requested Field Changes:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {Object.entries(req.requestedChanges || {}).map(([key, value]) => (
+                        <div key={key} className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-xs">
+                          <span className="text-[10px] uppercase font-bold text-zinc-500">{key}</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-zinc-400 line-through text-[11px]">
+                              {req.currentValues?.[key] ? String(req.currentValues[key]) : 'None'}
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-indigo-400 shrink-0" />
+                            <span className="text-indigo-300 font-semibold">{String(value)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+
+                  <CardFooter className="py-3 border-t border-zinc-800/80 flex justify-between items-center bg-zinc-950/30">
+                    <span className="text-[10px] text-zinc-500 font-mono">ID: {req._id}</span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => setApproveRequest(req)}
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8 px-3"
+                      >
+                        <Check className="h-3.5 w-3.5 mr-1" /> Approve Changes
+                      </Button>
+                      <Button
+                        onClick={() => handleOpenReject(req)}
+                        variant="outline"
+                        size="sm"
+                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs h-8 px-3"
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" /> Reject
+                      </Button>
+                    </div>
+                  </CardFooter>
+                </Card>
+              );
+            })}
           </div>
         )}
 

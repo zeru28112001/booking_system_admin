@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { bannerSchema, BannerFormData } from '@/lib/schemas';
@@ -43,25 +44,34 @@ export default function BannersPage() {
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [deletingBanner, setDeletingBanner] = useState<Banner | null>(null);
 
+  const { user } = useAuth();
+
   const {
     data: banners = [],
     isLoading: isBannersLoading,
     isRefetching: isBannersRefetching,
     refetch: refetchBanners,
   } = useQuery<Banner[]>({
-    queryKey: ['banners'],
+    queryKey: ['banners', user?.id],
     queryFn: async () => {
       const res = await apiRequest('/admin/banners');
-      return res.data || [];
+      const raw = res?.data || res || [];
+      return Array.isArray(raw) ? raw : [];
     },
+    enabled: !!user,
+    retry: 2,
+    staleTime: 5_000,
   });
 
   const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['categories'],
+    queryKey: ['categories', user?.id],
     queryFn: async () => {
       const res = await apiRequest('/admin/categories');
-      return res.data || [];
+      const raw = res?.data || res || [];
+      return Array.isArray(raw) ? raw : [];
     },
+    enabled: !!user,
+    staleTime: 5_000,
   });
 
   const {

@@ -34,42 +34,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkSession = async () => {
       const existingToken = getAuthToken();
-      const storedUserStr = localStorage.getItem('admin_user');
+      let storedUser: AdminUser | null = null;
 
-      if (existingToken && storedUserStr) {
+      if (typeof window !== 'undefined') {
         try {
-          const parsedUser = JSON.parse(storedUserStr);
-          if (parsedUser.role === 'admin') {
-            setToken(existingToken);
-            setUser(parsedUser);
+          const raw = localStorage.getItem('admin_user');
+          if (raw) storedUser = JSON.parse(raw);
+        } catch (_) {}
+      }
 
-            // Live verify session token with backend endpoint
-            try {
-              const res = await apiRequest('/auth/me');
-              if (res.data?.user) {
-                if (res.data.user.role === 'admin') {
-                  setUser(res.data.user);
-                  setAuthToken(existingToken, res.data.user);
-                } else {
-                  removeAuthToken();
-                  setUser(null);
-                  setToken(null);
-                }
-              }
-            } catch {
-              // Token expired, revoked, or server rejected
-              removeAuthToken();
-              setUser(null);
-              setToken(null);
-            }
-          } else {
+      if (existingToken) {
+        setToken(existingToken);
+        if (storedUser) setUser(storedUser);
+
+        try {
+          const res = await apiRequest('/auth/me');
+          const verifiedUser = res?.data?.user || res?.user;
+          if (verifiedUser && verifiedUser.role === 'admin') {
+            setUser(verifiedUser);
+            setAuthToken(existingToken, verifiedUser);
+          } else if (verifiedUser && verifiedUser.role !== 'admin') {
             removeAuthToken();
+            setUser(null);
+            setToken(null);
           }
-        } catch {
-          removeAuthToken();
+        } catch (err: any) {
+          // Only wipe session if server explicitly rejected authentication with 401
+          if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
+            removeAuthToken();
+            setUser(null);
+            setToken(null);
+          }
         }
-      } else {
-        removeAuthToken();
       }
       setIsLoading(false);
     };

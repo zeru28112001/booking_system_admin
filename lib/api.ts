@@ -61,7 +61,7 @@ export async function apiRequest<T = any>(
   const resData = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && url.includes('/auth/')) {
       removeAuthToken();
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';

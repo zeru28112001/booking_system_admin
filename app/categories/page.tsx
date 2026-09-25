@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { categorySchema, CategoryFormData } from '@/lib/schemas';
@@ -59,8 +60,25 @@ export const ICON_LIST: CategoryIcon[] = [
 ];
 
 export function getCategoryIcon(iconName?: string): LucideIcon {
+  if (!iconName) return HelpCircle;
   const found = ICON_LIST.find((item) => item.id === iconName);
-  return found ? found.icon : HelpCircle;
+  if (found) return found.icon;
+
+  const lower = iconName.toLowerCase();
+  if (lower.includes('salon') || lower.includes('cut') || lower.includes('hair') || lower.includes('barber')) return Scissors;
+  if (lower.includes('spa') || lower.includes('wellness') || lower.includes('beauty')) return Sparkles;
+  if (lower.includes('clean') || lower.includes('maid')) return Wrench;
+  if (lower.includes('plumb') || lower.includes('leak') || lower.includes('water')) return Wrench;
+  if (lower.includes('electr') || lower.includes('power') || lower.includes('zap')) return Zap;
+  if (lower.includes('tutor') || lower.includes('book') || lower.includes('teach') || lower.includes('education')) return BookOpen;
+  if (lower.includes('car') || lower.includes('auto') || lower.includes('vehicle')) return Car;
+  if (lower.includes('fit') || lower.includes('gym') || lower.includes('train')) return Dumbbell;
+  if (lower.includes('pest') || lower.includes('bug')) return Bug;
+  if (lower.includes('art') || lower.includes('paint') || lower.includes('brush') || lower.includes('design')) return Palette;
+  if (lower.includes('medic') || lower.includes('health') || lower.includes('doctor')) return Stethoscope;
+  if (lower.includes('repair') || lower.includes('hammer') || lower.includes('home') || lower.includes('fix')) return Hammer;
+
+  return HelpCircle;
 }
 
 interface Category {
@@ -79,17 +97,23 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
 
+  const { user } = useAuth();
+
   const {
     data: categories = [],
     isLoading,
     isRefetching,
     refetch,
   } = useQuery<Category[]>({
-    queryKey: ['categories'],
+    queryKey: ['categories', user?.id],
     queryFn: async () => {
       const res = await apiRequest('/admin/categories');
-      return res.data || [];
+      const raw = res?.data || res || [];
+      return Array.isArray(raw) ? raw : [];
     },
+    enabled: !!user,
+    retry: 2,
+    staleTime: 5_000,
   });
 
   const {

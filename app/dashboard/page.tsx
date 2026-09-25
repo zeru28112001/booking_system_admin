@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { AdminLayout } from '@/components/layout/admin-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,8 @@ interface Metrics {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+
   const {
     data: metrics,
     isLoading,
@@ -44,6 +47,9 @@ export default function DashboardPage() {
       const res = await apiRequest('/admin/metrics');
       return res.data;
     },
+    enabled: !!user,
+    retry: 2,
+    staleTime: 60_000,
   });
 
   return (

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { settingsSchema, SettingsFormData } from '@/lib/schemas';
@@ -22,6 +23,8 @@ export default function SettingsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingData, setPendingData] = useState<SettingsFormData | null>(null);
 
+  const { user } = useAuth();
+
   const {
     data: settingsData,
     isLoading,
@@ -37,6 +40,9 @@ export default function SettingsPage() {
         isMaintenanceMode: Boolean(res.data?.isMaintenanceMode),
       };
     },
+    enabled: !!user,
+    retry: 2,
+    staleTime: 60_000,
   });
 
   const {
